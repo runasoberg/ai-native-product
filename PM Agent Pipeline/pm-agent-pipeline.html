@@ -1,0 +1,514 @@
+<title>PM Agent Pipeline</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap">
+<style>
+/* Layout: header and controls, a stage rail, one wide navy panel holding the looping diagram, a cream detail card for the active stage. */
+:root{
+  --bg:#F3EEE6; --card:#FBF8F3; --ink:#0F1B2E; --muted:#6C675D; --line:#E2DACB;
+  --accent:#D97757; --accent-text:#B24E2B; --on-accent:#0F1B2E; --panel:#0F1B2E; --panel-line:#22324C;
+  --font:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#091221;--card:#121F34;--ink:#EEE9DF;--muted:#9BA7BA;--line:#22324C;--accent-text:#EE9A7C;color-scheme:dark}
+}
+:root[data-theme="dark"]{--bg:#091221;--card:#121F34;--ink:#EEE9DF;--muted:#9BA7BA;--line:#22324C;--accent-text:#EE9A7C;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.5 var(--font)}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 48px;display:flex;flex-direction:column;gap:18px}
+.eyebrow{margin:0;font:500 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+h1{margin:6px 0 10px;font:700 clamp(28px,4.6vw,44px)/1.05 var(--font);letter-spacing:-.02em;text-wrap:balance}
+.lead{margin:0;max-width:62ch;color:var(--muted);font-size:16px}
+.controls{display:flex;align-items:center;gap:14px}
+.icon-btn{flex:none;width:42px;height:42px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;cursor:pointer}
+.icon-btn svg{width:18px;height:18px;fill:currentColor}
+.icon-btn svg[hidden]{display:none}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent-text);outline-offset:2px}
+#scrub{flex:1;min-width:0;accent-color:var(--accent);height:24px}
+.clock{flex:none;min-width:84px;text-align:right;font:500 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.rail{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px}
+.rail button{width:100%;min-width:0;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 9px;text-align:left;font:600 12.5px/1.2 var(--font);cursor:pointer;overflow-wrap:break-word}
+.rail button b{display:block;margin-bottom:3px;font:500 10px var(--mono);letter-spacing:.06em;color:var(--muted)}
+.rail button[aria-current="step"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.rail button[aria-current="step"] b{color:var(--on-accent)}
+.panel{background:var(--panel);border:1px solid var(--panel-line);border-radius:20px;padding:10px}
+.scroll{overflow-x:auto}
+#dia{display:block;width:100%;height:auto;font-family:var(--font)}
+#dia .nm{font:600 13.5px var(--font)}
+#dia .sb{font:400 10px var(--mono)}
+#dia .nu,#dia .st{font:500 9px var(--mono);letter-spacing:.07em}
+#dia .lb{font:500 9px var(--mono);letter-spacing:.08em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px 22px;min-height:230px}
+.card-body{display:flex;flex-direction:column;gap:16px}
+.kind{display:inline-block;padding:3px 10px;border:1px solid var(--line);border-radius:99px;font:500 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text)}
+.kind.human{color:var(--ink)}
+.card h2{margin:8px 0 4px;font:700 24px/1.15 var(--font);letter-spacing:-.01em}
+.card .sum{margin:0;color:var(--muted);max-width:68ch}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin:0}
+.cols>div{min-width:0}
+dt{font:500 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+dd{margin:0}
+dd ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px}
+dd li{padding-left:14px;position:relative}
+dd li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;gap:10px 22px;font:500 11px var(--mono);color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.sw{display:inline-block;width:16px;height:12px;border-radius:4px}
+.sw.agent{background:var(--accent)}
+.sw.human{background:#E9E3D6;border:1px solid var(--muted);border-radius:99px}
+.sw.grp{border:1.5px dashed var(--accent)}
+.sw.par{border:1.5px dotted var(--muted)}
+.sw.flow{height:2px;background:var(--accent);border-radius:0}
+@media (max-width:760px){
+  .rail{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .rail button{font-size:10px;padding:6px 4px;overflow-wrap:normal;letter-spacing:-.01em}
+  .cols{grid-template-columns:minmax(0,1fr)}
+  .card{padding:18px 16px}
+  .clock{min-width:70px}
+}
+</style>
+
+<main class="wrap">
+  <header>
+    <p class="eyebrow">10 stages · 3 phases · 14 agents · 3 human decisions</p>
+    <h1>How a PM runs product with agents</h1>
+    <p class="lead">Agents gather evidence, spot patterns, prototype and build. People decide what is worth building, whether it is ready, and when it ships. Usage data from launch feeds the next round of research.</p>
+  </header>
+
+  <div class="controls">
+    <button id="play" class="icon-btn" type="button" aria-label="Pause the loop">
+      <svg id="ico-pause" viewBox="0 0 18 18" aria-hidden="true"><rect x="3" y="2" width="4" height="14" rx="1"/><rect x="11" y="2" width="4" height="14" rx="1"/></svg>
+      <svg id="ico-play" viewBox="0 0 18 18" aria-hidden="true" hidden><path d="M4 2.5v13l11-6.5z"/></svg>
+    </button>
+    <input id="scrub" type="range" min="0" max="15" step="0.01" value="0" aria-label="Position in the 15 second loop">
+    <output id="clock" class="clock" for="scrub">0.0 / 15 s</output>
+  </div>
+
+  <ol class="rail" id="rail" aria-label="Stages"></ol>
+
+  <section class="panel" aria-label="Animated pipeline diagram">
+    <div class="scroll">
+      <svg id="dia" viewBox="-26 0 1226 640" role="img" aria-label="Ten-stage product management pipeline in three groups: Discovery, Execution and Launch. Three research agents run in parallel and feed a pattern agent, which routes work to customer engagement and product problem agents. A prototype agent feeds a human review, then PRD, go-to-market, roadmap and builder agents, a testing agent, a human launch decision, an eval agent and usage analysis, which loops back to customer signals."></svg>
+    </div>
+  </section>
+
+  <section class="card" id="card">
+    <div class="card-body" id="cbody">
+      <div>
+        <span class="kind" id="c-kind"></span>
+        <h2 id="c-name"></h2>
+        <p class="sum" id="c-sum"></p>
+      </div>
+      <dl class="cols">
+        <div><dt>Reads</dt><dd id="c-reads"></dd></div>
+        <div><dt>Produces</dt><dd id="c-prod"></dd></div>
+        <div><dt>Hands to</dt><dd id="c-hand"></dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <div class="legend" aria-label="Legend">
+    <span><i class="sw agent"></i>Agent running</span>
+    <span><i class="sw human"></i>Human decision</span>
+    <span><i class="sw grp"></i>Phase: Discovery, Execution, Launch</span>
+    <span><i class="sw par"></i>Agents run in parallel</span>
+    <span><i class="sw flow"></i>Information handed on</span>
+  </div>
+</main>
+
+<script>
+(function(){
+'use strict';
+/* ---------- constants ---------- */
+const NS='http://www.w3.org/2000/svg', LOOP=15, STORY=10, PACE=LOOP/STORY, REST_FROM=9.5, REST_TO=9.9; /* the story is written in 10 units and played over 15 s */
+const hex=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const C={fill:hex('#162540'),stroke:hex('#2E4468'),orange:hex('#D97757'),navy:hex('#0F1B2E'),light:hex('#EDE8DD'),
+  muted:hex('#8FA0BA'),cream:hex('#F6F1E7'),creamDim:hex('#CBC4B6')};
+const clamp=(x,a,b)=>Math.min(b==null?1:b,Math.max(a==null?0:a,x));
+const ramp=(a,b,t)=>clamp((t-a)/(b-a));
+const sm=x=>x*x*(3-2*x);
+const sramp=(a,b,t)=>sm(ramp(a,b,t));
+const lerp=(a,b,k)=>a+(b-a)*k;
+const r=v=>(Math.round(v*1000)/1000)+0;
+const mixc=(a,b,k)=>'rgb('+a.map((v,i)=>Math.round(v+(b[i]-v)*k)).join(',')+')';
+const TAU=Math.PI*2;
+
+/* ---------- content ---------- */
+const STAGES=[
+ {n:'01',short:'Research',kind:'3 agents in parallel',group:'Discovery',name:'Research',s:9.8,e:11.2,seek:0.9,
+  sum:'Three agents start together and gather evidence from different sources.',
+  reads:['Internal tools: customer feedback, client queries, bugs, sales calls, user interviews, usage data','Learnings fed back from customer conversations and from post-launch usage','The web: competitor products, markets, technology and customer segments','The web: regulation, technology advances, economic and political shifts'],
+  prod:['Customer signals','Competitor moves','Market changes'],hand:['Pattern agent']},
+ {n:'02',short:'Patterns',kind:'Agent',group:'Discovery',name:'Pattern agent',s:1.2,e:2.0,seek:1.75,
+  sum:'Looks across all three streams for what is new and routes each pattern to the agent that can act on it.',
+  reads:['Customer, competitor and market findings'],
+  prod:['New usage patterns','New product problems to solve','New categories of user feedback'],hand:['Customer engagement agent','Product problems agent']},
+ {n:'03',short:'Follow-ups',kind:'2 agents in parallel',group:'Discovery',name:'Customer engagement and product problems',s:2.0,e:3.0,seek:2.8,
+  sum:'Each pattern goes to the agent that can act on it.',
+  reads:['Routed patterns from the Pattern agent'],
+  prod:['Users and segments the PM should speak with, with metadata and a tailored draft outreach message for each','Product problems defined and ranked, new ones added to the backlog'],
+  hand:['PM: customer conversations, which feed back into the Customer signal agent','Prototype agent: top-priority problems']},
+ {n:'04',short:'Prototypes',kind:'Agent',group:'Discovery',name:'Prototype agent',s:3.0,e:3.8,seek:3.6,
+  sum:'Turns the highest-priority problems into something people can react to.',
+  reads:['Top-ranked product problem definitions'],
+  prod:['Five prototypes for each problem it is sent'],hand:['PM review']},
+ {n:'05',short:'Review',kind:'Human decision',human:true,group:'Discovery',name:'PM and team review',s:3.8,e:4.8,seek:4.4,
+  sum:'People apply product sense and technology judgement. The agents wait.',
+  reads:['The five prototypes'],
+  prod:['Prototypes edited by the PM, who chooses what goes to the team','Decisions on open product and technology questions, including evals','One final prototype'],
+  hand:['PRD / Ticket agent','GTM planning agent']},
+ {n:'06',short:'Build',kind:'4 agents, 1 human sign-off',group:'Execution',name:'Requirements, launch plan and build',s:4.8,e:6.95,seek:5.9,
+  sum:'Requirements, launch plan and code move forward together.',
+  reads:['Problem definition, final prototype and any extra context','Current roadmap and planned launches'],
+  prod:['PRD and tickets with the build requirements','Go-to-market plan: timing, internal training, client communication, targeted marketing','Roadmap and backlog updated after a human signs off the plan','Working code from the Builder agent'],
+  hand:['Testing agent']},
+ {n:'07',short:'Testing',kind:'Agent',group:'Execution',name:'Testing agent',s:6.95,e:7.6,seek:7.3,
+  sum:'Checks the build against the standard and against the problem it was meant to solve.',
+  reads:['The built functionality','Coding and design criteria','The product problem definition'],
+  prod:['Quality review','A verdict on whether the result solves the problem as defined'],hand:['Launch decision']},
+ {n:'08',short:'Launch',kind:'Human decision',human:true,group:'Launch',name:'Decision to launch',s:7.6,e:8.2,seek:7.95,
+  sum:'A person decides whether it ships.',
+  reads:['Testing results'],prod:['Go or no-go'],hand:['EVAL agent']},
+ {n:'09',short:'EVAL',kind:'Agent',group:'Launch',name:'EVAL agent',s:8.2,e:8.8,seek:8.6,
+  sum:'Checks the live feature against the eval criteria set earlier.',
+  reads:['Live functionality','Eval criteria from the review stage'],
+  prod:['Eval results for the live product'],hand:['Usage analysis agent']},
+ {n:'10',short:'Usage',kind:'Agent',group:'Launch',name:'Usage analysis',s:8.8,e:9.8,seek:9.3,
+  sum:'Tracks what people actually do and compares it with what was expected.',
+  reads:['Post-launch usage: volume, time, and the way the functionality is used'],
+  prod:['Usage report: stats alongside insights on usage patterns'],hand:['Customer signal agent: the loop starts again']}
+];
+
+/* ---------- diagram model ---------- */
+const NODES=[
+ {id:'cs',st:'01',x:34,y:59,w:192,h:66,name:'Customer signal',sub:'tickets · calls · usage',s:.15,e:1.2},
+ {id:'cr',st:'01',x:34,y:139,w:192,h:66,name:'Competitor research',sub:'web: launches · markets',s:.15,e:1.2},
+ {id:'mr',st:'01',x:34,y:219,w:192,h:66,name:'Market research',sub:'rules · tech · macro',s:.15,e:1.2},
+ {id:'pa',st:'02',x:290,y:139,w:130,h:66,name:'Pattern agent',sub:'finds + routes',s:1.25,e:2.0},
+ {id:'ce',st:'03',x:500,y:70,w:190,h:66,name:'Customer engagement',sub:'who to call + drafts',s:2.15,e:3.0},
+ {id:'pp',st:'03',x:500,y:214,w:190,h:66,name:'Product problems',sub:'define · rank · backlog',s:2.15,e:3.0},
+ {id:'pr',st:'04',x:770,y:214,w:170,h:66,name:'Prototype agent',sub:'5 prototypes each',s:3.0,e:3.8},
+ {id:'hr',st:'05',gate:1,x:1010,y:214,w:170,h:66,name:'Human review',subs:['PM + team','reviewing','final prototype'],s:3.8,e:4.8},
+ {id:'prd',st:'06',x:60,y:400,w:170,h:66,name:'PRD / Ticket',sub:'requirements',s:5.4,e:6.0},
+ {id:'gtm',st:'06',x:60,y:500,w:170,h:66,name:'GTM planning',sub:'plan for review',s:5.6,e:6.1},
+ {id:'so',st:'06',gate:1,x:270,y:500,w:150,h:66,name:'Sign-off',subs:['waits','reviewing','approved'],s:6.1,e:6.55},
+ {id:'rd',st:'06',x:440,y:500,w:140,h:66,name:'Roadmap',sub:'updates timelines',s:6.7,e:7.1},
+ {id:'bu',st:'06',x:290,y:400,w:130,h:66,name:'Builder agent',sub:'codes the ticket',s:6.15,e:6.9,bar:1},
+ {id:'te',st:'07',x:620,y:400,w:130,h:66,name:'Testing agent',sub:'checks the build',s:6.95,e:7.6},
+ {id:'la',st:'08',gate:1,x:800,y:400,w:160,h:66,name:'Go / no-go',subs:['waits','deciding','go for launch'],s:7.6,e:8.2},
+ {id:'ev',st:'09',x:1020,y:400,w:150,h:66,name:'EVAL agent',sub:'live vs evals',s:8.3,e:8.85},
+ {id:'us',st:'10',x:1020,y:500,w:150,h:66,name:'Usage analysis',sub:'vs expected usage',s:8.85,e:9.45}
+];
+/* id, path, start, travel time, window, gate-bound */
+const EDGES=[
+ ['a1','M226 92 C258 92 256 172 290 172',.75,.3,.45],
+ ['a2','M226 172 H290',.75,.3,.45],
+ ['a3','M226 252 C258 252 256 172 290 172',.75,.3,.45],
+ ['hc','M420 172 C460 172 460 103 500 103',1.9,.3,.35],
+ ['hp','M420 172 C460 172 460 247 500 247',1.9,.3,.35],
+ ['cc','M690 103 H730',2.7,.2,.25],
+ ['pp','M690 247 H770',2.75,.25,.3],
+ ['pg','M940 247 H1010',3.5,.3,.3,1],
+ ['bus','M1095 310 V352 H36 V433 H60',4.8,.6,.7],
+ ['bus2','M36 433 V533 H60',5.35,.3,.3],
+ ['pb','M230 433 H290',5.85,.3,.3],
+ ['gs','M230 533 H270',5.9,.25,.3,1],
+ ['sr','M420 533 H440',6.5,.2,.2],
+ ['bt','M420 433 H620',6.55,.4,.4],
+ ['tg','M750 433 H800',7.35,.25,.25,1],
+ ['ge','M960 433 H1020',8.1,.25,.25],
+ ['eu','M1095 466 V500',8.7,.2,.2],
+ ['cf','M815 87 V30 H190 V59',3.0,.7,.9],
+ ['fb','M1095 566 V622 H-14 V92 H34',9.35,.5,.5]
+];
+const FRAMES=[
+ {x:2,y:18,w:1190,h:314,label:'01–05 · DISCOVERY',s:.15,e:4.8},
+ {x:24,y:40,w:212,h:262,label:'RUN IN PARALLEL',s:.15,e:1.2,inner:1},
+ {x:2,y:372,w:768,h:220,label:'06–07 · EXECUTION',s:4.8,e:7.6},
+ {x:782,y:372,w:410,h:220,label:'08–10 · LAUNCH',s:7.6,e:9.45}
+];
+
+/* ---------- build the SVG once (geometry and elements only; no animation state) ---------- */
+const svg=document.getElementById('dia');
+const el=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);(parent||svg).appendChild(e);return e;};
+const text=(parent,cls,x,y,str,anchor,fill)=>{const t=el('text',{class:cls,x:x,y:y,fill:fill||'#EDE8DD'},parent);if(anchor)t.setAttribute('text-anchor',anchor);t.textContent=str;return t;};
+
+FRAMES.forEach(f=>{
+  f.rect=el('rect',{x:f.x,y:f.y,width:f.w,height:f.h,rx:f.inner?18:22,fill:'none',stroke:f.inner?'#8FA0BA':'#D97757','stroke-width':1.5,'stroke-dasharray':f.inner?'2 5':'5 6'});
+  text(svg,'lb',f.x+4,f.y-8,f.label,null,f.inner?'#8FA0BA':'#EDE8DD');
+});
+
+const E=EDGES.map(a=>{
+  const e={id:a[0],d:a[1],es:a[2],tr:a[3],win:a[4],gate:!!a[5]};
+  e.base=el('path',{d:e.d,fill:'none',stroke:'#2E4468','stroke-width':2,'stroke-linejoin':'round'});
+  e.ov=el('path',{d:e.d,fill:'none',stroke:'#D97757','stroke-width':2.5,pathLength:1,'stroke-linejoin':'round'});
+  e.L=e.base.getTotalLength();
+  const end=e.base.getPointAtLength(e.L), pre=e.base.getPointAtLength(Math.max(0,e.L-2));
+  const ang=Math.atan2(end.y-pre.y,end.x-pre.x)*180/Math.PI;
+  const mk=fill=>el('polygon',{points:'-9,-5 0,0 -9,5',fill:fill,transform:'translate('+r(end.x)+' '+r(end.y)+') rotate('+r(ang)+')'});
+  mk('#2E4468'); e.aho=mk('#D97757');
+  e.N=e.L>400?6:4; e.gap=Math.max(.05,(e.win-e.tr)/(e.N-1));
+  e.p0=e.base.getPointAtLength(0);
+  return e;
+});
+
+/* labelled flow captions */
+const capBus=text(svg,'lb',560,346,'final prototype + problem definition → PRD and GTM plan','middle','#8FA0BA');
+const capCF=text(svg,'lb',500,43,'customer conversations feed the customer signal agent','middle','#8FA0BA');
+const capFb=text(svg,'lb',560,614,'usage insights feed the next research cycle','middle','#8FA0BA');
+
+/* output chips: g with centre for a small pop-in */
+function chip(x,y,w,h,label,opts){
+  const o=opts||{};
+  const g=el('g',{});
+  g.cx=x+w/2; g.cy=y+h/2;
+  el('rect',{x:x,y:y,width:w,height:h,rx:h/2,fill:o.fill||'#22324C',stroke:o.stroke||'#D97757','stroke-width':1.2},g);
+  text(g,'sb',x+w/2,y+h/2+3.5,label,'middle',o.text||'#EDE8DD');
+  return g;
+}
+const chipCE=chip(730,87,170,32,'customer conversations');
+const chipBL=chip(510,292,170,26,'problems ranked → backlog');
+const chipFP=chip(1015,288,160,22,'final prototype');
+const chipPA1=chip(300,218,110,22,'new usage pattern');
+const chipPA2=chip(300,244,110,22,'new problem');
+const chipLive=chip(1118,352,60,18,'LIVE',{fill:'#D97757',stroke:'#D97757',text:'#0F1B2E'});
+const chipRep=chip(800,562,200,20,'usage report + insights');
+
+/* prototype cards */
+const CARDS=[0,1,2,3,4].map(j=>{
+  const g=el('g',{});
+  const rc=el('rect',{x:0,y:0,width:26,height:30,rx:5,fill:'#162540',stroke:'#2E4468','stroke-width':1.2},g);
+  const l1=el('rect',{x:5,y:7,width:16,height:3,rx:1.5,fill:'#8FA0BA'},g);
+  const l2=el('rect',{x:5,y:14,width:11,height:3,rx:1.5,fill:'#8FA0BA'},g);
+  const l3=el('rect',{x:5,y:21,width:14,height:3,rx:1.5,fill:'#8FA0BA'},g);
+  return {g,rc,ls:[l1,l2,l3],j};
+});
+
+/* testing checklist */
+const CHECKS=['code quality','design criteria','solves the problem'].map((label,i)=>{
+  const y=492+i*24, g=el('g',{});
+  el('circle',{cx:632,cy:y,r:7,fill:'#162540',stroke:'#2E4468','stroke-width':1.2},g);
+  const ck=el('path',{d:'M628.5 '+y+' L631 '+(y+3)+' L636 '+(y-3),fill:'none',stroke:'#D97757','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round',pathLength:1},g);
+  text(g,'sb',646,y+3.5,label);
+  return {g,ck,at:7.1+i*.2};
+});
+
+/* usage chart */
+const chart=el('g',{});
+el('rect',{x:800,y:484,width:200,height:72,rx:12,fill:'#162540',stroke:'#2E4468','stroke-width':1.2},chart);
+text(chart,'lb',812,500,'USAGE · ACTUAL VS EXPECTED',null,'#8FA0BA');
+el('line',{x1:812,y1:544,x2:988,y2:544,stroke:'#2E4468','stroke-width':1},chart);
+el('path',{d:'M812 526 C846 522 884 518 988 516',fill:'none',stroke:'#8FA0BA','stroke-width':1.5,'stroke-dasharray':'4 4'},chart);
+const actual=el('path',{d:'M812 536 C834 530 852 508 880 508 S934 524 988 510',fill:'none',stroke:'#D97757','stroke-width':2.5,'stroke-linecap':'round',pathLength:1},chart);
+const actualL=actual.getTotalLength();
+const head=el('circle',{r:4,fill:'#F6F1E7',stroke:'#D97757','stroke-width':2},chart);
+const actualP0=actual.getPointAtLength(0);
+
+/* nodes */
+NODES.forEach(n=>{
+  const g=el('g',{transform:'translate('+n.x+' '+n.y+')'});
+  n.g=g;
+  n.ring=el('rect',{x:n.gate?-4:-5,y:n.gate?-4:-5,width:n.w+(n.gate?8:10),height:n.h+(n.gate?8:10),rx:n.gate?(n.h+8)/2:18,fill:'none',stroke:'#D97757','stroke-width':n.gate?3:2,pathLength:1},g);
+  n.bg=el('rect',{x:0,y:0,width:n.w,height:n.h,rx:n.gate?n.h/2:12,'stroke-width':1.5},g);
+  if(n.gate){
+    n.glyph=el('g',{transform:'translate(30 33)'},g);
+    el('circle',{cx:0,cy:-7,r:5.5,fill:'#0F1B2E'},n.glyph);
+    el('path',{d:'M-11 12 Q-11 1 0 1 Q11 1 11 12 Z',fill:'#0F1B2E'},n.glyph);
+    n.check=el('path',{d:'M-9 1 L-3 8 L10 -8',transform:'translate(30 33)',fill:'none',stroke:'#B8532E','stroke-width':3.4,'stroke-linecap':'round','stroke-linejoin':'round',pathLength:1},g);
+    n.nm=text(g,'nm',52,31,n.name,null,'#0F1B2E');
+    n.sb=text(g,'sb',52,48,n.subs[0],null,'#4A5568');
+  }else{
+    n.nu=text(g,'nu',14,18,n.st,null,'#8FA0BA');
+    n.stt=text(g,'st',n.w-12,18,'IDLE','end','#8FA0BA');
+    n.nm=text(g,'nm',14,40,n.name);
+    n.sb=text(g,'sb',14,56,n.sub,null,'#8FA0BA');
+    if(n.bar){
+      n.track=el('rect',{x:14,y:n.h-8,width:n.w-28,height:3,rx:1.5,fill:'#2E4468'},g);
+      n.fillbar=el('rect',{x:14,y:n.h-8,width:0,height:3,rx:1.5,fill:'#D97757'},g);
+    }
+  }
+});
+
+/* dots go on top of everything */
+E.forEach(e=>{
+  e.dots=[];
+  for(let j=0;j<e.N;j++)e.dots.push(el('circle',{r:3.6,fill:'#F6F1E7',opacity:0,cx:e.p0.x,cy:e.p0.y}));
+});
+
+/* ---------- rail ---------- */
+const rail=document.getElementById('rail');
+const railBtns=STAGES.map((s,i)=>{
+  const li=document.createElement('li'), b=document.createElement('button');
+  b.type='button'; b.innerHTML='<b>'+s.n+'</b>'+s.short;
+  b.setAttribute('aria-label','Stage '+(i+1)+': '+s.short);
+  b.addEventListener('click',()=>{playing=false;cur=s.seek*PACE;syncButton();render(cur);});
+  li.appendChild(b); rail.appendChild(li); return b;
+});
+
+/* ---------- the pure frame function ---------- */
+const $=id=>document.getElementById(id);
+const elScrub=$('scrub'), elClock=$('clock'), elBody=$('cbody');
+let shownStage=-1;
+
+function stageAt(u){
+  const tt=u<1.2?u+STORY:u;
+  for(let i=0;i<STAGES.length;i++)if(tt>=STAGES[i].s&&tt<STAGES[i].e)return {i:i,tt:tt};
+  return {i:0,tt:tt};
+}
+const list=a=>'<ul>'+a.map(x=>'<li>'+x+'</li>').join('')+'</ul>';
+
+function render(t){
+  /* u is the loop position in seconds, us the same moment on the 10-unit story clock,
+     f the position the diagram is drawn at. From story time 9.9 the diagram is fully
+     at rest, which is exactly its state at 0. */
+  const u=((t%LOOP)+LOOP)%LOOP;
+  const us=u/PACE;
+  const f=us>=REST_TO?0:us;
+  const rest=1-sramp(REST_FROM,REST_TO,f);
+
+  /* frames */
+  FRAMES.forEach(fr=>{
+    const act=sramp(fr.s,fr.s+.2,f)*(1-sramp(fr.e,fr.e+.2,f));
+    fr.rect.setAttribute('stroke-opacity',r(.3+.7*act));
+  });
+
+  /* edges and dots */
+  E.forEach(e=>{
+    const g=sramp(e.es,e.es+e.tr,f);
+    const dim=1-.55*sramp(e.es+e.win+.2,e.es+e.win+.6,f);
+    e.ov.setAttribute('stroke-dasharray',r(g)+' 1');
+    e.ov.setAttribute('opacity',r(dim*rest));
+    e.aho.setAttribute('opacity',r(sramp(e.es+e.tr*.8,e.es+e.tr,f)*dim*rest));
+    for(let j=0;j<e.N;j++){
+      const q=(f-e.es-j*e.gap)/e.tr;
+      let x=e.p0.x,y=e.p0.y,a=0;
+      if(q>0&&q<1){
+        const qq=e.gate?1-(1-q)*(1-q):q, p=e.base.getPointAtLength(qq*e.L);
+        x=p.x;y=p.y;a=Math.sqrt(Math.sin(Math.PI*q))*rest;
+      }
+      const d=e.dots[j];
+      d.setAttribute('cx',r(x));d.setAttribute('cy',r(y));d.setAttribute('opacity',r(a));
+    }
+  });
+
+  /* nodes */
+  NODES.forEach(n=>{
+    const up=sramp(n.s,n.s+.2,f), dn=sramp(n.e,n.e+.25,f);
+    if(n.gate){
+      const span=n.e-n.s, sweepEnd=n.s+span*.6;
+      const on=sramp(n.s,n.s+.12,f)*rest;
+      const sweep=sramp(n.s+.05,sweepEnd,f)*(on>0?1:0);
+      const tick=sramp(sweepEnd,n.e-.05,f)*(on>0?1:0);
+      n.ring.setAttribute('opacity',r(on));
+      n.ring.setAttribute('stroke-dasharray',r(sweep)+' 1');
+      n.bg.setAttribute('fill',mixc(C.creamDim,C.cream,on));
+      n.bg.setAttribute('stroke',mixc(C.stroke,C.orange,on));
+      n.glyph.setAttribute('opacity',r(1-tick));
+      n.check.setAttribute('stroke-dasharray',r(tick)+' 1');
+      n.check.setAttribute('opacity',r(rest>0?1:0));
+      n.sb.textContent=rest<.5?n.subs[0]:(tick>.98?n.subs[2]:(f>=n.s?n.subs[1]:n.subs[0]));
+      return;
+    }
+    const run=up*(1-dn), done=dn*rest;
+    const pulse=.9+.1*Math.sin(TAU*20*f/STORY);
+    const k=clamp(run*pulse+done*.2);
+    n.bg.setAttribute('fill',mixc(C.fill,C.orange,k));
+    n.bg.setAttribute('stroke',mixc(C.stroke,C.orange,Math.max(run,done*.85)));
+    n.ring.setAttribute('opacity',r(run*(.1+.9*(.5+.5*Math.sin(TAU*20*f/STORY)))));
+    n.ring.setAttribute('stroke-dasharray','1 0');
+    const tk=sramp(.4,.6,k), tc=mixc(C.light,C.navy,tk), sc=mixc(C.muted,C.navy,tk);
+    n.nm.setAttribute('fill',tc);
+    n.sb.setAttribute('fill',sc);
+    n.nu.setAttribute('fill',sc);
+    const label=done>.5?'DONE':(run>.05?'RUNNING':'IDLE');
+    n.stt.textContent=label;
+    n.stt.setAttribute('fill',tk>.5?mixc(C.muted,C.navy,tk):(done>.5?mixc(C.muted,C.orange,done):mixc(C.muted,C.muted,0)));
+    if(n.bar){
+      const p=ramp(6.2,6.9,f)*(rest>0?1:0);
+      n.fillbar.setAttribute('width',r((n.w-28)*p));
+      n.fillbar.setAttribute('fill',mixc(C.orange,C.navy,tk));
+      n.track.setAttribute('fill',mixc(C.stroke,hex('#B4533A'),tk));
+    }
+  });
+
+  /* chips */
+  const pop=(g,at,fl)=>{const k=sramp(at,at+.25,f)*rest, o=(fl||0)+(1-(fl||0))*k;g.setAttribute('opacity',r(o));g.setAttribute('transform','translate('+r(g.cx)+' '+r(g.cy)+') scale('+r(.88+.12*k)+') translate('+r(-g.cx)+' '+r(-g.cy)+')');};
+  pop(chipPA1,1.7);pop(chipPA2,1.85);pop(chipCE,2.7,.3);pop(chipBL,2.8,.3);pop(chipFP,4.6,.3);pop(chipLive,8.1);pop(chipRep,9.2,.3);
+  capBus.setAttribute('opacity',r(sramp(4.7,4.95,f)*rest));
+  capFb.setAttribute('opacity',r(sramp(9.4,9.6,f)*rest));
+  capCF.setAttribute('opacity',r(sramp(3.0,3.25,f)*rest));
+
+  /* prototype cards: one card spreads into five, one is picked */
+  const spread0=sramp(3.1,3.25,f)*rest, pick=sramp(4.2,4.5,f)*rest;
+  CARDS.forEach(c=>{
+    const e=sramp(3.15+.04*c.j,3.65+.04*c.j,f), x=lerp(829,774+c.j*34,e), sel=c.j===2?pick:0;
+    c.g.setAttribute('transform','translate('+r(x)+' 292)');
+    c.g.setAttribute('opacity',r(spread0*(c.j===2?1:1-.55*pick)));
+    c.rc.setAttribute('fill',mixc(C.fill,C.orange,sel));
+    c.rc.setAttribute('stroke',mixc(C.stroke,C.orange,sel));
+    c.ls.forEach(l=>l.setAttribute('fill',mixc(C.muted,C.navy,sel)));
+  });
+
+  /* testing checklist */
+  CHECKS.forEach(c=>{
+    const k=sramp(c.at,c.at+.2,f)*(rest>0?1:0);
+    c.ck.setAttribute('stroke-dasharray',r(k)+' 1');
+    c.g.setAttribute('opacity',r((.4+.6*k)*rest));
+  });
+
+  /* usage chart draws itself */
+  const cg=sramp(8.9,9.35,f)*(rest>0?1:0);
+  actual.setAttribute('stroke-dasharray',r(cg)+' 1');
+  const hp=cg>0?actual.getPointAtLength(cg*actualL):actualP0;
+  head.setAttribute('cx',r(hp.x));head.setAttribute('cy',r(hp.y));
+  head.setAttribute('opacity',r(sramp(8.9,9.0,f)*rest));
+  chart.setAttribute('opacity',r(.45+.55*sramp(8.8,9.0,f)));
+
+  /* detail card, rail, controls: also functions of u */
+  const s=stageAt(us), st=STAGES[s.i];
+  if(shownStage!==s.i){
+    shownStage=s.i;
+    $('c-kind').textContent=st.group+' · '+st.kind; $('c-kind').className='kind'+(st.human?' human':'');
+    $('c-name').textContent=st.name; $('c-sum').textContent=st.sum;
+    $('c-reads').innerHTML=list(st.reads); $('c-prod').innerHTML=list(st.prod); $('c-hand').innerHTML=list(st.hand);
+    railBtns.forEach((b,i)=>{if(i===s.i)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+  }
+  elBody.style.opacity=r(.45+.55*Math.min(ramp(st.s,st.s+.2,s.tt),1-ramp(st.e-.15,st.e,s.tt)));
+  elScrub.value=r(u);
+  elClock.textContent=u.toFixed(1)+' / 15 s';
+}
+window.renderAt=render;
+
+/* ---------- the only clock: it supplies t and nothing else ---------- */
+const btn=$('play'), icoPause=$('ico-pause'), icoPlay=$('ico-play');
+const reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let playing=!reduced, cur=1.65, origin=null;
+function syncButton(){
+  icoPause.toggleAttribute('hidden',!playing); icoPlay.toggleAttribute('hidden',playing);
+  btn.setAttribute('aria-label',playing?'Pause the loop':'Play the loop');
+  origin=null;
+}
+btn.addEventListener('click',()=>{playing=!playing;syncButton();});
+elScrub.addEventListener('input',()=>{playing=false;cur=parseFloat(elScrub.value);syncButton();render(cur);});
+document.addEventListener('keydown',ev=>{
+  const tag=ev.target&&ev.target.tagName;
+  if(ev.key==='ArrowRight'||ev.key==='ArrowLeft'){
+    if(tag==='INPUT')return;
+    const i=stageAt((((cur%LOOP)+LOOP)%LOOP)/PACE).i, j=(i+(ev.key==='ArrowRight'?1:STAGES.length-1))%STAGES.length;
+    playing=false;cur=STAGES[j].seek*PACE;syncButton();render(cur);ev.preventDefault();
+  }else if(ev.key===' '&&tag!=='BUTTON'&&tag!=='INPUT'){playing=!playing;syncButton();ev.preventDefault();}
+});
+function frame(now){
+  if(playing){
+    if(origin===null)origin=now-(playedFromStart?cur*1000:0);
+    cur=((now-origin)/1000)%LOOP;
+    render(cur);
+  }
+  requestAnimationFrame(frame);
+}
+let playedFromStart=true;
+render(cur);          /* first paint: a populated mid-loop frame */
+if(playing)cur=0;     /* playback itself starts at 0 s with Col A waking up */
+syncButton();
+requestAnimationFrame(frame);
+})();
+</script>

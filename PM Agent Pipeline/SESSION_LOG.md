@@ -20,6 +20,8 @@ The first plan was rejected and replaced with these requirements:
 - Every element is a pure function of `t`. No timers, no CSS keyframes. The first and last frame of the loop are identical, and any frame can be drawn on demand.
 - Before finishing, render one moment per second across the loop, side by side, and fix what is wrong.
 
+The approved plan is in [PLAN.md](PLAN.md), with a table of where the build departed from it.
+
 ## What was built
 
 A diagram on a navy panel with a cream page around it. Agents are navy boxes that turn orange while running and take an orange outline when done. Human decisions are cream pills with a person icon, a ring that sweeps round while they decide, and a tick when done. Dots travel along connectors to show information moving. Output chips pop in at the points where an agent hands something over. A card under the diagram lists what the active stage reads, produces and hands on.

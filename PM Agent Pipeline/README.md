@@ -2,7 +2,7 @@
 
 A 15-second looping motion graphic showing how a product manager can run product work through a chain of agents: which ones run in parallel, where people decide, and what each stage hands to the next.
 
-Live version (private until shared from the page's Share menu): https://claude.ai/artifact/XyrjZxPgego174XPnYJTrw
+Live version: https://claude.ai/artifact/XyrjZxPgego174XPnYJTrw
 
 ## The idea
 

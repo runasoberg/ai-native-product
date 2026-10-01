@@ -1,4 +1,4 @@
-# Plan: PM Agent Pipeline
+# Requirements & build plan: PM Agent Pipeline
 
 Date: 2026-10-01
 

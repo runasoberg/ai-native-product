@@ -20,7 +20,7 @@ The first plan was rejected and replaced with these requirements:
 - Every element is a pure function of `t`. No timers, no CSS keyframes. The first and last frame of the loop are identical, and any frame can be drawn on demand.
 - Before finishing, render one moment per second across the loop, side by side, and fix what is wrong.
 
-The approved plan is in [PLAN.md](PLAN.md), with a table of where the build departed from it.
+The approved plan is in [Requirements & build plan.md](Requirements%20%26%20build%20plan.md), with a table of where the build departed from it.
 
 ## What was built
 

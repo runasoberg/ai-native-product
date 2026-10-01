@@ -15,7 +15,7 @@ Each artefact is a small, self-contained piece of work: a diagram, a prototype, 
 ```
 <Artefact name>/
   README.md        what it is, how to view it, how it is built
-  PLAN.md          the plan it was built from
+  Requirements & build plan.md   the plan it was built from
   SESSION_LOG.md   how it was made: brief, decisions, revisions, checks
   <the artefact>   the code or file itself
   verify/          anything used to check it (optional)

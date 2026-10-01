@@ -57,4 +57,4 @@ Output goes to `verify/out/`, which is git-ignored.
 - The checks above ran in a sandbox where Google Fonts was blocked, so they used a wider fallback font. Labels have slack for that, but the live font has not been compared frame by frame.
 - Dark theme was checked at desktop width only. Phone was checked in the light theme only.
 
-See [PLAN.md](PLAN.md) for the plan it was built from and [SESSION_LOG.md](SESSION_LOG.md) for how it was made.
+See [Requirements & build plan.md](Requirements%20%26%20build%20plan.md) for the plan it was built from and [SESSION_LOG.md](SESSION_LOG.md) for how it was made.
